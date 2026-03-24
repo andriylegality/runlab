@@ -1,0 +1,506 @@
+import { useState } from "react";
+
+const ATHLETE = {
+  name: "Andri Y",
+  restHR: 55,
+  maxHR: 178,
+  hrr: 123,
+  currentHRV: 31,
+  normalHRV: [40, 70],
+  recoveryStatus: "reduced",
+};
+
+const ZONES = [
+  { zone: 1, name: "Recovery", pctLow: 50, pctHigh: 60, low: 117, high: 129, color: "#6ee7b7", desc: "Easy run, warm-up, cool-down" },
+  { zone: 2, name: "Aerobic Base", pctLow: 60, pctHigh: 70, low: 129, high: 141, color: "#60a5fa", desc: "Fat burning, endurance foundation" },
+  { zone: 3, name: "Tempo", pctLow: 70, pctHigh: 80, low: 141, high: 153, color: "#fbbf24", desc: "Stamina, lactate threshold prep" },
+  { zone: 4, name: "Threshold", pctLow: 80, pctHigh: 90, low: 153, high: 166, color: "#f97316", desc: "Speed endurance, race pace" },
+  { zone: 5, name: "VO2max", pctLow: 90, pctHigh: 100, low: 166, high: 178, color: "#ef4444", desc: "Max effort, sprint finish" },
+];
+
+const WEEK_PLAN = [
+  {
+    day: "Senin",
+    type: "Rest / Active Recovery",
+    icon: "🧘",
+    zone: null,
+    duration: "–",
+    detail: "Hari ini HRV masih reduced (31ms). Istirahat total atau jalan kaki ringan 20-30 menit. Fokus stretching & foam rolling.",
+    intensity: "rest",
+    targetHR: "< 117 bpm",
+  },
+  {
+    day: "Selasa",
+    type: "Easy Run",
+    icon: "🏃",
+    zone: 2,
+    duration: "35–40 min",
+    detail: "Easy run di Z2 (129–141 bpm). Pace santai ~6:00-6:30/km. Bangun aerobic base tanpa stress berlebih. Nasal breathing test: jika bisa napas lewat hidung, pace sudah benar.",
+    intensity: "easy",
+    targetHR: "129–141 bpm",
+  },
+  {
+    day: "Rabu",
+    type: "Rest / Cross Training",
+    icon: "🏊",
+    zone: null,
+    duration: "30 min",
+    detail: "Swimming ringan, yoga, atau bersepeda santai. Aktifkan otot tanpa impact tinggi. Alternatif: core strength training (plank, dead bug, bird dog).",
+    intensity: "rest",
+    targetHR: "< 129 bpm",
+  },
+  {
+    day: "Kamis",
+    type: "Tempo Run",
+    icon: "⚡",
+    zone: 3,
+    duration: "30–35 min",
+    detail: "Warm-up 10 min Z1 → Tempo 15 min Z3 (141–153 bpm) → Cool-down 10 min Z1. Pace ~5:20-5:40/km di segment tempo. Jaga HR agar tidak melonjak ke Z4.",
+    intensity: "moderate",
+    targetHR: "141–153 bpm",
+  },
+  {
+    day: "Jumat",
+    type: "Easy Run",
+    icon: "🏃",
+    zone: 2,
+    duration: "30 min",
+    detail: "Recovery easy run. Jaga HR di Z2 (129–141 bpm). Ini hari pemulihan aktif sebelum long run weekend. Fokus pada form & cadence.",
+    intensity: "easy",
+    targetHR: "129–141 bpm",
+  },
+  {
+    day: "Sabtu",
+    type: "Long Run",
+    icon: "🏔️",
+    zone: 2,
+    duration: "50–60 min",
+    detail: "Long slow run di Z2 (129–141 bpm). Target 8–10 km. Pace ~6:00-6:30/km. Bawa hidrasi. Ini sesi paling penting untuk membangun endurance base.",
+    intensity: "long",
+    targetHR: "129–141 bpm",
+  },
+  {
+    day: "Minggu",
+    type: "Interval / Speed Work",
+    icon: "🔥",
+    zone: 4,
+    duration: "30–35 min",
+    detail: "Warm-up 10 min Z1 → 6×400m di Z4 (153–166 bpm) dengan recovery jog 90 detik antar set → Cool-down 10 min Z1. Push best km target ke sub-4:00/km.",
+    intensity: "hard",
+    targetHR: "153–166 bpm",
+  },
+];
+
+const intensityGradients = {
+  rest: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
+  easy: "linear-gradient(135deg, #0a1628 0%, #0d2137 100%)",
+  moderate: "linear-gradient(135deg, #1a1a0a 0%, #2d2506 100%)",
+  long: "linear-gradient(135deg, #0a1a1a 0%, #062d2d 100%)",
+  hard: "linear-gradient(135deg, #1a0a0a 0%, #2d0606 100%)",
+};
+
+const intensityAccents = {
+  rest: "#8b5cf6",
+  easy: "#60a5fa",
+  moderate: "#fbbf24",
+  long: "#34d399",
+  hard: "#ef4444",
+};
+
+export default function RunlabTrainingPlan() {
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [activeZone, setActiveZone] = useState(null);
+
+  const totalRunDays = WEEK_PLAN.filter((d) => d.zone !== null).length;
+  const totalRestDays = WEEK_PLAN.filter((d) => d.zone === null).length;
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#050a0f",
+      fontFamily: "'Plus Jakarta Sans', 'SF Pro Display', -apple-system, sans-serif",
+      color: "#e2e8f0",
+      padding: "0",
+      overflow: "hidden",
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideIn {
+          from { opacity: 0; transform: translateX(-20px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        
+        @keyframes pulseGlow {
+          0%, 100% { box-shadow: 0 0 20px rgba(96, 165, 250, 0.1); }
+          50% { box-shadow: 0 0 30px rgba(96, 165, 250, 0.25); }
+        }
+        
+        @keyframes barGrow {
+          from { width: 0; }
+        }
+        
+        .zone-bar:hover {
+          transform: scaleY(1.15);
+          filter: brightness(1.3);
+        }
+        
+        .day-card {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          cursor: pointer;
+        }
+        
+        .day-card:hover {
+          transform: translateY(-2px);
+        }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+      `}</style>
+
+      <div style={{ maxWidth: 520, margin: "0 auto", padding: "20px 16px 40px" }}>
+        
+        {/* Header */}
+        <div style={{ 
+          animation: "fadeIn 0.6s ease-out",
+          marginBottom: 24,
+          textAlign: "center",
+        }}>
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            background: "linear-gradient(135deg, #60a5fa20, #34d39920)",
+            border: "1px solid #60a5fa30",
+            borderRadius: 20,
+            padding: "6px 14px",
+            marginBottom: 12,
+          }}>
+            <span style={{ fontFamily: "JetBrains Mono", fontSize: 11, color: "#60a5fa", fontWeight: 600, letterSpacing: 1.5 }}>
+              RUNLAB
+            </span>
+            <span style={{ color: "#475569", fontSize: 11 }}>×</span>
+            <span style={{ fontFamily: "JetBrains Mono", fontSize: 11, color: "#34d399", fontWeight: 600, letterSpacing: 1.5 }}>
+              COROS
+            </span>
+          </div>
+          
+          <h1 style={{
+            fontSize: 22,
+            fontWeight: 800,
+            background: "linear-gradient(135deg, #f1f5f9, #94a3b8)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            letterSpacing: -0.5,
+            lineHeight: 1.2,
+          }}>
+            Weekly Training Plan
+          </h1>
+          <p style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+            Personalized HR Zones • Karvonen Method
+          </p>
+        </div>
+
+        {/* Athlete Card */}
+        <div style={{
+          background: "linear-gradient(135deg, #0f172a, #1e293b)",
+          border: "1px solid #1e293b",
+          borderRadius: 16,
+          padding: 16,
+          marginBottom: 20,
+          animation: "fadeIn 0.6s ease-out 0.1s both",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%",
+                background: "linear-gradient(135deg, #60a5fa, #3b82f6)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 15, fontWeight: 700, color: "#fff",
+              }}>A</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{ATHLETE.name}</div>
+                <div style={{ color: "#64748b", fontSize: 11, fontFamily: "JetBrains Mono" }}>RHR {ATHLETE.restHR} • MHR {ATHLETE.maxHR} • HRR {ATHLETE.hrr}</div>
+              </div>
+            </div>
+            <div style={{
+              background: ATHLETE.recoveryStatus === "reduced" ? "#7f1d1d40" : "#14532d40",
+              border: `1px solid ${ATHLETE.recoveryStatus === "reduced" ? "#dc262640" : "#16a34a40"}`,
+              borderRadius: 8,
+              padding: "4px 8px",
+            }}>
+              <div style={{ fontSize: 10, color: "#94a3b8", fontFamily: "JetBrains Mono" }}>HRV</div>
+              <div style={{ 
+                fontSize: 16, fontWeight: 700, fontFamily: "JetBrains Mono",
+                color: ATHLETE.recoveryStatus === "reduced" ? "#fca5a5" : "#86efac",
+              }}>{ATHLETE.currentHRV}ms</div>
+            </div>
+          </div>
+
+          {/* Zone Bars */}
+          <div style={{ display: "flex", gap: 3, height: 32, alignItems: "flex-end" }}>
+            {ZONES.map((z) => (
+              <div
+                key={z.zone}
+                className="zone-bar"
+                onMouseEnter={() => setActiveZone(z.zone)}
+                onMouseLeave={() => setActiveZone(null)}
+                style={{
+                  flex: 1,
+                  height: `${40 + z.zone * 12}%`,
+                  background: activeZone === z.zone 
+                    ? z.color 
+                    : `${z.color}90`,
+                  borderRadius: "4px 4px 0 0",
+                  transition: "all 0.2s ease",
+                  cursor: "pointer",
+                  position: "relative",
+                }}
+              >
+                {activeZone === z.zone && (
+                  <div style={{
+                    position: "absolute",
+                    bottom: "calc(100% + 6px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "#0f172a",
+                    border: `1px solid ${z.color}50`,
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    whiteSpace: "nowrap",
+                    zIndex: 10,
+                    animation: "fadeIn 0.15s ease-out",
+                  }}>
+                    <div style={{ fontSize: 10, color: z.color, fontWeight: 700, fontFamily: "JetBrains Mono" }}>Z{z.zone} {z.name}</div>
+                    <div style={{ fontSize: 11, color: "#e2e8f0", fontFamily: "JetBrains Mono", fontWeight: 600 }}>{z.low}–{z.high} bpm</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+            {ZONES.map((z) => (
+              <span key={z.zone} style={{ flex: 1, textAlign: "center", fontSize: 10, color: "#64748b", fontFamily: "JetBrains Mono" }}>Z{z.zone}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Weekly Summary */}
+        <div style={{
+          display: "flex", gap: 8, marginBottom: 20,
+          animation: "fadeIn 0.6s ease-out 0.2s both",
+        }}>
+          {[
+            { label: "Run Days", value: totalRunDays, icon: "🏃", color: "#60a5fa" },
+            { label: "Rest Days", value: totalRestDays, icon: "🧘", color: "#8b5cf6" },
+            { label: "Target", value: "80/20", icon: "📊", color: "#34d399" },
+          ].map((stat) => (
+            <div key={stat.label} style={{
+              flex: 1,
+              background: "#0f172a",
+              border: "1px solid #1e293b",
+              borderRadius: 12,
+              padding: "10px 8px",
+              textAlign: "center",
+            }}>
+              <div style={{ fontSize: 16, marginBottom: 2 }}>{stat.icon}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: stat.color, fontFamily: "JetBrains Mono" }}>{stat.value}</div>
+              <div style={{ fontSize: 10, color: "#64748b" }}>{stat.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Training Distribution */}
+        <div style={{
+          background: "#0f172a",
+          border: "1px solid #1e293b",
+          borderRadius: 12,
+          padding: 14,
+          marginBottom: 20,
+          animation: "fadeIn 0.6s ease-out 0.25s both",
+        }}>
+          <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 10, letterSpacing: 0.5 }}>DISTRIBUSI TRAINING</div>
+          {[
+            { label: "Z2 Aerobic (80%)", pct: 80, color: "#60a5fa" },
+            { label: "Z1 Recovery (10%)", pct: 10, color: "#6ee7b7" },
+            { label: "Z3-Z4 Intensity (10%)", pct: 10, color: "#fbbf24" },
+          ].map((item) => (
+            <div key={item.label} style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>{item.label}</span>
+                <span style={{ fontSize: 11, color: item.color, fontFamily: "JetBrains Mono", fontWeight: 600 }}>{item.pct}%</span>
+              </div>
+              <div style={{ height: 4, background: "#1e293b", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{
+                  width: `${item.pct}%`,
+                  height: "100%",
+                  background: item.color,
+                  borderRadius: 4,
+                  animation: "barGrow 1s ease-out",
+                }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Day Cards */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {WEEK_PLAN.map((day, i) => {
+            const isExpanded = selectedDay === i;
+            const accent = intensityAccents[day.intensity];
+            const zoneData = day.zone ? ZONES.find((z) => z.zone === day.zone) : null;
+
+            return (
+              <div
+                key={day.day}
+                className="day-card"
+                onClick={() => setSelectedDay(isExpanded ? null : i)}
+                style={{
+                  background: intensityGradients[day.intensity],
+                  border: `1px solid ${isExpanded ? accent + "50" : "#1e293b"}`,
+                  borderRadius: 14,
+                  padding: 14,
+                  animation: `slideIn 0.4s ease-out ${0.3 + i * 0.06}s both`,
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                {/* Accent stripe */}
+                <div style={{
+                  position: "absolute",
+                  left: 0, top: 0, bottom: 0, width: 3,
+                  background: accent,
+                  borderRadius: "14px 0 0 14px",
+                }} />
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 8 }}>
+                    <span style={{ fontSize: 22 }}>{day.icon}</span>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontWeight: 700, fontSize: 14 }}>{day.day}</span>
+                        {zoneData && (
+                          <span style={{
+                            fontSize: 10,
+                            fontFamily: "JetBrains Mono",
+                            fontWeight: 600,
+                            color: zoneData.color,
+                            background: `${zoneData.color}15`,
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                          }}>Z{day.zone}</span>
+                        )}
+                      </div>
+                      <div style={{ color: "#94a3b8", fontSize: 12 }}>{day.type}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "JetBrains Mono", color: accent }}>{day.duration}</div>
+                    <div style={{ fontSize: 10, color: "#64748b", fontFamily: "JetBrains Mono" }}>{day.targetHR}</div>
+                  </div>
+                </div>
+
+                {/* Expanded Detail */}
+                {isExpanded && (
+                  <div style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    paddingLeft: 8,
+                    borderTop: `1px solid ${accent}20`,
+                    animation: "fadeIn 0.3s ease-out",
+                  }}>
+                    <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.6 }}>{day.detail}</p>
+                    
+                    {zoneData && (
+                      <div style={{
+                        marginTop: 10,
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}>
+                        <div style={{
+                          background: `${zoneData.color}10`,
+                          border: `1px solid ${zoneData.color}25`,
+                          borderRadius: 8,
+                          padding: "8px 12px",
+                          flex: 1,
+                          minWidth: 120,
+                        }}>
+                          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>TARGET HR</div>
+                          <div style={{ fontFamily: "JetBrains Mono", fontWeight: 700, fontSize: 16, color: zoneData.color }}>
+                            {zoneData.low}–{zoneData.high}
+                            <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8" }}> bpm</span>
+                          </div>
+                        </div>
+                        <div style={{
+                          background: "#60a5fa10",
+                          border: "1px solid #60a5fa25",
+                          borderRadius: 8,
+                          padding: "8px 12px",
+                          flex: 1,
+                          minWidth: 120,
+                        }}>
+                          <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>%HRR</div>
+                          <div style={{ fontFamily: "JetBrains Mono", fontWeight: 700, fontSize: 16, color: "#60a5fa" }}>
+                            {zoneData.pctLow}–{zoneData.pctHigh}
+                            <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8" }}> %</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer Note */}
+        <div style={{
+          marginTop: 24,
+          padding: 14,
+          background: "#7f1d1d20",
+          border: "1px solid #dc262625",
+          borderRadius: 12,
+          animation: "fadeIn 0.6s ease-out 0.8s both",
+        }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#fca5a5", marginBottom: 4 }}>Catatan Recovery</div>
+              <p style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                HRV kamu saat ini 31ms (di bawah normal 40–70ms). Hari ini (Senin) prioritaskan istirahat total. 
+                Mulai latihan ringan besok jika HRV sudah membaik. Dengarkan tubuhmu — skip interval di hari Minggu 
+                jika HRV masih di bawah 35ms pada akhir minggu.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Method Info */}
+        <div style={{
+          marginTop: 16,
+          textAlign: "center",
+          animation: "fadeIn 0.6s ease-out 0.9s both",
+        }}>
+          <div style={{ fontSize: 10, color: "#475569", fontFamily: "JetBrains Mono", lineHeight: 1.6 }}>
+            Karvonen Formula: Target HR = RHR + (%Intensity × HRR)
+            <br />
+            RHR 55 bpm • MHR 178 bpm • HRR 123 bpm
+          </div>
+          <div style={{ fontSize: 10, color: "#334155", marginTop: 8 }}>
+            RUNLAB × COROS • Built for Andri Y
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
